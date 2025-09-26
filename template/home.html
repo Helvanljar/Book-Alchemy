@@ -50,10 +50,14 @@
               <img src="{{ book.cover_image }}" alt="Cover of {{ book.title }}" class="w-24 h-auto mb-2">
             {% endif %}
             <h3 class="text-lg font-semibold">
-              <a href="{{ url_for('book_detail', book_id=book.id) }}" class="text-blue-600 hover:underline">{{ book.title }}</a> by {{ book.author.name }}
+              <a href="{{ url_for('book_detail', book_id=book.id) }}" class="text-blue-600 hover:underline">{{ book.title }}</a> by
+              <a href="{{ url_for('author_detail', author_id=book.author_id) }}" class="text-blue-600 hover:underline">{{ book.author.name }}</a>
             </h3>
-            <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" class="mt-2">
+            <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" class="mt-2 inline-block">
               <input type="submit" value="Delete Book" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+            </form>
+            <form action="{{ url_for('delete_author', author_id=book.author_id) }}" method="POST" class="mt-2 inline-block">
+              <input type="submit" value="Delete Author" class="bg-red-700 text-white px-3 py-1 rounded hover:bg-red-800">
             </form>
           </div>
           {% endfor %}

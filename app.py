@@ -42,7 +42,8 @@ def home():
         response = requests.get(f"https://covers.openlibrary.org/b/isbn/{book.isbn}-M.jpg")
         book.cover_image = response.url if response.status_code == 200 else None
 
-    return render_template('home.html', books=books)
+    authors = Author.query.all()
+    return render_template('home.html', books=books, authors=authors)
 
 
 @app.route('/book/<int:book_id>')
@@ -109,6 +110,15 @@ def delete_book(book_id):
     else:
         flash(f'Book "{book.title}" deleted successfully!', 'success')
 
+    return redirect(url_for('home'))
+
+
+@app.route('/author/<int:author_id>/delete', methods=['POST'])
+def delete_author(author_id):
+    author = Author.query.get_or_404(author_id)
+    db.session.delete(author)  # Cascades to delete associated books
+    db.session.commit()
+    flash(f'Author "{author.name}" and their books deleted successfully!', 'success')
     return redirect(url_for('home'))
 
 

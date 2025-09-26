@@ -8,6 +8,7 @@ class Author(db.Model):
     name = db.Column(db.String(100), nullable=False)
     birth_date = db.Column(db.Date, nullable=False)
     date_of_death = db.Column(db.Date, nullable=True)
+    books = db.relationship('Book', backref='author', lazy=True, cascade='all, delete-orphan')
 
     def __repr__(self):
         return f"<Author(id={self.id}, name={self.name})>"
@@ -22,7 +23,6 @@ class Book(db.Model):
     title = db.Column(db.String(200), nullable=False)
     publication_year = db.Column(db.Integer, nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey('authors.id'), nullable=False)
-    author = db.relationship('Author', backref=db.backref('books', lazy=True))
 
     def __repr__(self):
         return f"<Book(id={self.id}, title={self.title})>"
