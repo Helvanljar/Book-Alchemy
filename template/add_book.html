@@ -4,12 +4,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Digital Library</title>
   </head>
   <body>
+    <h1>My Digital Library</h1>
 
-  <form action="/add_author" method="POST">
-  <!-- Add the form here -->
-  </form>
+    <div>
+      <a href="{{ url_for('add_book') }}">Add Book</a> |
+      <a href="{{ url_for('add_author') }}">Add Author</a>
+    </div>
 
+    <div>
+      <form action="{{ url_for('home') }}" method="GET">
+        <label for="sort_by">Sort by:</label>
+        <select id="sort_by" name="sort_by" onchange="this.form.submit()">
+          <option value="title" {% if request.args.get('sort_by', 'title') == 'title' %}selected{% endif %}>Title</option>
+          <option value="author" {% if request.args.get('sort_by') == 'author' %}selected{% endif %}>Author</option>
+        </select>
+      </form>
+    </div>
+
+    {% for book in books %}
+    <div>
+      {% if book.cover_image %}
+        <img src="{{ book.cover_image }}" alt="Cover of {{ book.title }}" width="100">
+      {% endif %}
+      <h3>{{ book.title }} by {{ book.author.name }}</h3>
+    </div>
+    {% endfor %}
   </body>
 </html>
