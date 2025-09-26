@@ -79,6 +79,25 @@ def add_book():
     return render_template('add_book.html', authors=authors)
 
 
+@app.route('/book/<int:book_id>/delete', methods=['POST'])
+def delete_book(book_id):
+    book = Book.query.get_or_404(book_id)
+    author_id = book.author_id
+    db.session.delete(book)
+    db.session.commit()
+
+    # Check if author has other books
+    if not Book.query.filter_by(author_id=author_id).count():
+        author = Author.query.get(author_id)
+        db.session.delete(author)
+        db.session.commit()
+        flash(f'Book "{book.title}" and author "{author.name}" deleted successfully!', 'success')
+    else:
+        flash(f'Book "{book.title}" deleted successfully!', 'success')
+
+    return redirect(url_for('home'))
+
+
 # Seed data (run once, then comment out)
 with app.app_context():
     if Author.query.count() == 0:

@@ -47,6 +47,9 @@
           <img src="{{ book.cover_image }}" alt="Cover of {{ book.title }}" width="100">
         {% endif %}
         <h3>{{ book.title }} by {{ book.author.name }}</h3>
+        <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" style="display:inline;">
+          <input type="submit" value="Delete Book">
+        </form>
       </div>
       {% endfor %}
     {% else %}
