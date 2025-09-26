@@ -46,9 +46,19 @@ def home():
     return render_template('home.html', books=books, authors=authors)
 
 
-@app.route('/book/<int:book_id>')
+@app.route('/book/<int:book_id>', methods=['GET', 'POST'])
 def book_detail(book_id):
     book = Book.query.get_or_404(book_id)
+    if request.method == 'POST':
+        rating = request.form.get('rating')
+        if rating and rating.isdigit() and 1 <= int(rating) <= 10:
+            book.rating = int(rating)
+            db.session.commit()
+            flash(f'Rating updated for "{book.title}"!', 'success')
+        else:
+            flash('Invalid rating. Please enter a number between 1 and 10.', 'error')
+        return redirect(url_for('book_detail', book_id=book_id))
+
     response = requests.get(f"https://covers.openlibrary.org/b/isbn/{book.isbn}-M.jpg")
     book.cover_image = response.url if response.status_code == 200 else None
     return render_template('book_detail.html', book=book)
@@ -116,7 +126,7 @@ def delete_book(book_id):
 @app.route('/author/<int:author_id>/delete', methods=['POST'])
 def delete_author(author_id):
     author = Author.query.get_or_404(author_id)
-    db.session.delete(author)  # Cascades to delete associated books
+    db.session.delete(author)
     db.session.commit()
     flash(f'Author "{author.name}" and their books deleted successfully!', 'success')
     return redirect(url_for('home'))

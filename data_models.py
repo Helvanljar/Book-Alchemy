@@ -23,6 +23,7 @@ class Book(db.Model):
     title = db.Column(db.String(200), nullable=False)
     publication_year = db.Column(db.Integer, nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey('authors.id'), nullable=False)
+    rating = db.Column(db.Integer, nullable=True)  # Rating from 1 to 10
 
     def __repr__(self):
         return f"<Book(id={self.id}, title={self.title})>"
