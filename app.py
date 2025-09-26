@@ -4,7 +4,7 @@ import os
 import requests
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'  # Needed for flash messages
+app.config['SECRET_KEY'] = 'your-secret-key'
 
 # Configure database URI
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -26,12 +26,18 @@ with app.app_context():
 @app.route('/')
 def home():
     sort_by = request.args.get('sort_by', 'title')
-    if sort_by == 'author':
-        books = Book.query.join(Author).order_by(Author.name, Book.title).all()
-    else:
-        books = Book.query.order_by(Book.title).all()
+    search = request.args.get('search', '').strip()
 
-    # Fetch cover images using Open Library API
+    query = Book.query
+    if search:
+        query = query.filter(Book.title.ilike(f'%{search}%'))
+
+    if sort_by == 'author':
+        books = query.join(Author).order_by(Author.name, Book.title).all()
+    else:
+        books = query.order_by(Book.title).all()
+
+    # Fetch cover images
     for book in books:
         response = requests.get(f"https://covers.openlibrary.org/b/isbn/{book.isbn}-M.jpg")
         book.cover_image = response.url if response.status_code == 200 else None
