@@ -4,12 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Add Book</title>
+    <title>Digital Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto p-4">
-      <h1 class="text-2xl font-bold mb-4">Add a New Book</h1>
+      <h1 class="text-3xl font-bold text-center mb-6">My Digital Library</h1>
+
+      <div class="flex justify-center space-x-4 mb-4">
+        <a href="{{ url_for('add_book') }}" class="text-blue-600 hover:underline">Add Book</a>
+        <a href="{{ url_for('add_author') }}" class="text-blue-600 hover:underline">Add Author</a>
+      </div>
+
+      <div class="mb-4">
+        <form action="{{ url_for('home') }}" method="GET" class="flex space-x-2">
+          <label for="sort_by" class="text-lg">Sort by:</label>
+          <select id="sort_by" name="sort_by" onchange="this.form.submit()" class="border rounded p-1">
+            <option value="title" {% if request.args.get('sort_by', 'title') == 'title' %}selected{% endif %}>Title</option>
+            <option value="author" {% if request.args.get('sort_by') == 'author' %}selected{% endif %}>Author</option>
+          </select>
+        </form>
+      </div>
+
+      <div class="mb-4">
+        <form action="{{ url_for('home') }}" method="GET" class="flex space-x-2">
+          <label for="search" class="text-lg">Search Books:</label>
+          <input type="text" id="search" name="search" value="{{ request.args.get('search', '') }}" class="border rounded p-1">
+          <input type="submit" value="Search" class="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-600">
+        </form>
+      </div>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -19,33 +42,25 @@
         {% endif %}
       {% endwith %}
 
-      <form action="/add_book" method="POST" class="space-y-4">
-        <div>
-          <label for="isbn" class="block text-lg">ISBN:</label>
-          <input type="text" id="isbn" name="isbn" required class="border rounded p-2 w-full">
+      {% if books %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {% for book in books %}
+          <div class="bg-white p-4 rounded shadow">
+            {% if book.cover_image %}
+              <img src="{{ book.cover_image }}" alt="Cover of {{ book.title }}" class="w-24 h-auto mb-2">
+            {% endif %}
+            <h3 class="text-lg font-semibold">
+              <a href="{{ url_for('book_detail', book_id=book.id) }}" class="text-blue-600 hover:underline">{{ book.title }}</a> by {{ book.author.name }}
+            </h3>
+            <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" class="mt-2">
+              <input type="submit" value="Delete Book" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+            </form>
+          </div>
+          {% endfor %}
         </div>
-
-        <div>
-          <label for="title" class="block text-lg">Title:</label>
-          <input type="text" id="title" name="title" required class="border rounded p-2 w-full">
-        </div>
-
-        <div>
-          <label for="publication_year" class="block text-lg">Publication Year:</label>
-          <input type="number" id="publication_year" name="publication_year" required class="border rounded p-2 w-full">
-        </div>
-
-        <div>
-          <label for="author_id" class="block text-lg">Author:</label>
-          <select id="author_id" name="author_id" required class="border rounded p-2 w-full">
-            {% for author in authors %}
-              <option value="{{ author.id }}">{{ author.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <input type="submit" value="Add Book" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-      </form>
+      {% else %}
+        <p class="text-center text-gray-600">No books found matching your search criteria.</p>
+      {% endif %}
     </div>
   </body>
 </html>

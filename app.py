@@ -45,6 +45,20 @@ def home():
     return render_template('home.html', books=books)
 
 
+@app.route('/book/<int:book_id>')
+def book_detail(book_id):
+    book = Book.query.get_or_404(book_id)
+    response = requests.get(f"https://covers.openlibrary.org/b/isbn/{book.isbn}-M.jpg")
+    book.cover_image = response.url if response.status_code == 200 else None
+    return render_template('book_detail.html', book=book)
+
+
+@app.route('/author/<int:author_id>')
+def author_detail(author_id):
+    author = Author.query.get_or_404(author_id)
+    return render_template('author_detail.html', author=author)
+
+
 @app.route('/add_author', methods=['GET', 'POST'])
 def add_author():
     if request.method == 'POST':
