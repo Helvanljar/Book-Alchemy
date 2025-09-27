@@ -1,29 +1,32 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Author Details</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto p-4">
-      <h1 class="text-2xl font-bold mb-4">Author Details</h1>
-      <div class="bg-white p-4 rounded shadow">
-        <h2 class="text-xl font-semibold">{{ author.name }}</h2>
-        <p><strong>Birth Date:</strong> {{ author.birth_date }}</p>
-        {% if author.date_of_death %}
-          <p><strong>Date of Death:</strong> {{ author.date_of_death }}</p>
-        {% endif %}
-        <h3 class="text-lg font-semibold mt-4">Books by {{ author.name }}</h3>
-        <ul class="list-disc pl-5">
-          {% for book in author.books %}
-            <li><a href="{{ url_for('book_detail', book_id=book.id) }}" class="text-blue-600 hover:underline">{{ book.title }}</a></li>
-          {% endfor %}
-        </ul>
-        <a href="{{ url_for('home') }}" class="text-blue-600 hover:underline mt-4 inline-block">Back to Library</a>
+<!-- Modal: Details for a single author -->
+<div id="authorModal{{ author.id }}" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal('authorModal{{ author.id }}')">&times;</span>
+    <h2>{{ author.name }}</h2>
+
+    {% if author.books %}
+      <!-- Grid of books by this author -->
+      <div class="author-books-grid">
+        {% for book in author.books %}
+          <div class="author-book-card" onclick="openModal('bookModal{{ book.id }}')">
+            <img src="{{ book.cover_url if book.cover_url and book.cover_url.strip() else url_for('static', filename='default_cover.jpg') }}"
+                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='default_cover.jpg') }}'"
+                 alt="Cover of {{ book.title }}">
+            <div class="author-book-info">
+              <strong>{{ book.title }}</strong>
+              {% if book.publication_year %}<span>{{ book.publication_year }}</span>{% endif %}
+              {% if book.rating %}<span class="rating">⭐ {{ '%.1f'|format(book.rating) }}</span>{% endif %}
+            </div>
+          </div>
+        {% endfor %}
       </div>
-    </div>
-  </body>
-</html>
+
+      <!-- Book modals for each book -->
+      {% for book in author.books %}
+        {% include 'book_detail.html' %}
+      {% endfor %}
+    {% else %}
+      <p>No books available for this author.</p>
+    {% endif %}
+  </div>
+</div>

@@ -1,42 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Add Author</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto p-4">
-      <h1 class="text-2xl font-bold mb-4">Add a New Author</h1>
+<!-- Modal: Add a new author -->
+<div id="addAuthorModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal('addAuthorModal')">&times;</span>
+    <h2>Add Author</h2>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            <p class="text-center text-{{ 'green' if category == 'success' else 'red' }}-600">{{ message }}</p>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
+    <form method="post" action="{{ url_for('add_author') }}">
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" required>
 
-      <form action="/add_author" method="POST" class="space-y-4">
-        <div>
-          <label for="name" class="block text-lg">Author Name:</label>
-          <input type="text" id="name" name="name" required class="border rounded p-2 w-full">
-        </div>
+      <label for="birthdate">Birth Date</label>
+      <input type="date" id="birthdate" name="birthdate">
 
-        <div>
-          <label for="birthdate" class="block text-lg">Birthdate:</label>
-          <input type="date" id="birthdate" name="birthdate" required class="border rounded p-2 w-full">
-        </div>
+      <label for="date_of_death">Date of Death (optional)</label>
+      <input type="date" id="date_of_death" name="date_of_death">
 
-        <div>
-          <label for="date_of_death" class="block text-lg">Date of Death:</label>
-          <input type="date" id="date_of_death" name="date_of_death" class="border rounded p-2 w-full">
-        </div>
-
-        <input type="submit" value="Add Author" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-      </form>
-    </div>
-  </body>
-</html>
+      <button class="btn primary" type="submit">Add Author</button>
+    </form>
+  </div>
+</div>

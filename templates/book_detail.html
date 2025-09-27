@@ -1,33 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Book Details</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto p-4">
-      <h1 class="text-2xl font-bold mb-4">Book Details</h1>
-      <div class="bg-white p-4 rounded shadow">
-        {% if book.cover_image %}
-          <img src="{{ book.cover_image }}" alt="Cover of {{ book.title }}" class="w-48 h-auto mb-4">
-        {% endif %}
-        <h2 class="text-xl font-semibold">{{ book.title }}</h2>
-        <p><strong>Author:</strong> <a href="{{ url_for('author_detail', author_id=book.author_id) }}" class="text-blue-600 hover:underline">{{ book.author.name }}</a></p>
-        <p><strong>ISBN:</strong> {{ book.isbn }}</p>
-        <p><strong>Publication Year:</strong> {{ book.publication_year }}</p>
-        <p><strong>Rating:</strong> {{ book.rating or 'Not rated' }}</p>
+<!-- Modal: Details for a single book -->
+<div id="bookModal{{ book.id }}" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal('bookModal{{ book.id }}')">&times;</span>
 
-        <form action="{{ url_for('book_detail', book_id=book.id) }}" method="POST" class="mt-4">
-          <label for="rating" class="block text-lg">Rate this book (1-10):</label>
-          <input type="number" id="rating" name="rating" min="1" max="10" class="border rounded p-2 w-20">
-          <input type="submit" value="Submit Rating" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-2">
-        </form>
+    <!-- Fixed-size cover ensures placeholder never looks oversized -->
+    <img class="modal-cover"
+         src="{{ book.cover_url if book.cover_url and book.cover_url.strip() else url_for('static', filename='default_cover.jpg') }}"
+         onerror="this.onerror=null;this.src='{{ url_for('static', filename='default_cover.jpg') }}'"
+         alt="Cover of {{ book.title }}">
 
-        <a href="{{ url_for('home') }}" class="text-blue-600 hover:underline mt-4 inline-block">Back to Library</a>
-      </div>
-    </div>
-  </body>
-</html>
+    <h2>{{ book.title }}</h2>
+    <p><strong>Author:</strong> {{ book.author.name }}</p>
+    {% if book.publication_year %}<p><strong>Year:</strong> {{ book.publication_year }}</p>{% endif %}
+    {% if book.isbn %}<p><strong>ISBN:</strong> {{ book.isbn }}</p>{% endif %}
+    {% if book.rating %}<p><strong>Rating:</strong> {{ '%.1f'|format(book.rating) }}</p>{% endif %}
+
+    <!-- Delete book form -->
+    <form method="post" action="{{ url_for('delete_book', book_id=book.id) }}">
+      <button class="btn danger" type="submit" style="display:block;margin:14px auto 0;">
+        🗑 Delete Book
+      </button>
+    </form>
+  </div>
+</div>

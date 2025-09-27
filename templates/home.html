@@ -1,71 +1,86 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Digital Library</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto p-4">
-      <h1 class="text-3xl font-bold text-center mb-6">My Digital Library</h1>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The Digital Library</title>
 
-      <div class="flex justify-center space-x-4 mb-4">
-        <a href="{{ url_for('add_book') }}" class="text-blue-600 hover:underline">Add Book</a>
-        <a href="{{ url_for('add_author') }}" class="text-blue-600 hover:underline">Add Author</a>
-        <a href="{{ url_for('recommend') }}" class="text-blue-600 hover:underline">Recommend a Book</a>
-      </div>
+  <!-- Styles and scripts -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script defer src="{{ url_for('static', filename='script.js') }}"></script>
+</head>
+<body>
+  <!-- Sidebar menu -->
+  <aside class="sidebar">
+    <h2>Menu</h2>
 
-      <div class="mb-4">
-        <form action="{{ url_for('home') }}" method="GET" class="flex space-x-2">
-          <label for="sort_by" class="text-lg">Sort by:</label>
-          <select id="sort_by" name="sort_by" onchange="this.form.submit()" class="border rounded p-1">
-            <option value="title" {% if request.args.get('sort_by', 'title') == 'title' %}selected{% endif %}>Title</option>
-            <option value="author" {% if request.args.get('sort_by') == 'author' %}selected{% endif %}>Author</option>
-          </select>
-        </form>
-      </div>
-
-      <div class="mb-4">
-        <form action="{{ url_for('home') }}" method="GET" class="flex space-x-2">
-          <label for="search" class="text-lg">Search Books:</label>
-          <input type="text" id="search" name="search" value="{{ request.args.get('search', '') }}" class="border rounded p-1">
-          <input type="submit" value="Search" class="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-600">
-        </form>
-      </div>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            <p class="text-center text-{{ 'green' if category == 'success' else 'red' }}-600">{{ message }}</p>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
-
-      {% if books %}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {% for book in books %}
-          <div class="bg-white p-4 rounded shadow">
-            {% if book.cover_image %}
-              <img src="{{ book.cover_image }}" alt="Cover of {{ book.title }}" class="w-24 h-auto mb-2">
-            {% endif %}
-            <h3 class="text-lg font-semibold">
-              <a href="{{ url_for('book_detail', book_id=book.id) }}" class="text-blue-600 hover:underline">{{ book.title }}</a> by
-              <a href="{{ url_for('author_detail', author_id=book.author_id) }}" class="text-blue-600 hover:underline">{{ book.author.name }}</a>
-            </h3>
-            <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" class="mt-2 inline-block">
-              <input type="submit" value="Delete Book" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
-            </form>
-            <form action="{{ url_for('delete_author', author_id=book.author_id) }}" method="POST" class="mt-2 inline-block">
-              <input type="submit" value="Delete Author" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
-            </form>
-          </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="text-center text-gray-600">No books found matching your search criteria.</p>
-      {% endif %}
+    <!-- Dark mode toggle -->
+    <div class="toggle-wrapper">
+      <label class="switch">
+        <input type="checkbox" id="themeToggle">
+        <span class="slider"></span>
+      </label>
+      <span>Dark Mode</span>
     </div>
-  </body>
+
+    <!-- Navigation buttons (modals) -->
+    <button class="btn" onclick="openModal('authorListModal')">📚 Authors</button>
+    <button class="btn" onclick="openModal('addBookModal')">➕ Add Book</button>
+    <button class="btn" onclick="openModal('addAuthorModal')">👤 Add Author</button>
+    <button class="btn" id="recommendOpen">✨ Recommend</button>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+    <h1>The Digital Library</h1>
+
+    <!-- Search + Sort form -->
+    <form class="search-bar" method="get" action="{{ url_for('home') }}">
+      <div class="search-input-wrapper">
+        <input type="text" name="q" placeholder="🔎 Search books or authors..."
+               value="{{ search_query or '' }}">
+        <button type="submit" class="btn primary">Search</button>
+      </div>
+
+      <!-- Sort dropdown -->
+      <select name="sort" onchange="this.form.submit()">
+        <option value="title" {% if sort_by=='title' %}selected{% endif %}>Sort by Title</option>
+        <option value="author" {% if sort_by=='author' %}selected{% endif %}>Sort by Author</option>
+        <option value="year" {% if sort_by=='year' %}selected{% endif %}>Sort by Year</option>
+        <option value="rating" {% if sort_by=='rating' %}selected{% endif %}>Sort by Rating</option>
+      </select>
+    </form>
+
+    <!-- Book Grid -->
+    <section class="book-grid">
+      {% if books %}
+        {% for book in books %}
+          <!-- Individual book card -->
+          <article class="book-card" onclick="openModal('bookModal{{ book.id }}')">
+            <img src="{{ book.cover_url if book.cover_url and book.cover_url.strip() else url_for('static', filename='default_cover.jpg') }}"
+                 onerror="this.onerror=null;this.src='{{ url_for('static', filename='default_cover.jpg') }}'"
+                 alt="Cover of {{ book.title }}">
+            <h3>{{ book.title }}</h3>
+            <p>{{ book.author.name }}</p>
+          </article>
+
+          <!-- Include book modal for details -->
+          {% include 'book_detail.html' %}
+        {% endfor %}
+      {% else %}
+        <!-- No results message -->
+        <p class="loading-text">No books match your search.</p>
+      {% endif %}
+    </section>
+  </main>
+
+  <!-- Global modals -->
+  {% include 'author_list.html' %}
+  {% include 'add_book.html' %}
+  {% include 'add_author.html' %}
+  {% include 'recommend.html' %}
+
+  <!-- Toast notifications -->
+  <div id="toast"></div>
+</body>
 </html>

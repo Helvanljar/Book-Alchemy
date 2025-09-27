@@ -1,416 +1,340 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
-from sqlalchemy.exc import IntegrityError
+"""
+Flask application for a simple Digital Library.
+Features:
+- Manage authors and books
+- Search and sort books
+- Delete books and authors
+- Recommend books using AI (Hugging Face), Open Library, or random fallback
+"""
+
 import os
-import requests
 import random
+from io import BytesIO
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = "your-secret-key"
-
-# Configure database URI
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"sqlite:///{os.path.join(basedir, 'data/library.sqlite')}"
+import requests
+from PIL import Image
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    jsonify
 )
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Import db and models
 from data_models import db, Author, Book
 
-# Initialize SQLAlchemy
+
+# -----------------------------------------------------------------------------
+# Flask setup
+# -----------------------------------------------------------------------------
+app = Flask(__name__, template_folder="templates", static_folder="static")
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_PATH = os.path.join(BASE_DIR, "data", "library.db")
+
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+# Initialize SQLAlchemy with Flask app
 db.init_app(app)
 
-# Create database tables
-with app.app_context():
-    try:
-        db.create_all()
-    except Exception as e:
-        print(f"Error creating database tables: {e}")
 
-
-def get_book_recommendation(books):
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+def validate_cover(url: str) -> str | None:
     """
-    Simulate an AI recommendation by selecting a book based on ratings or randomly.
-    Replace with a real RapidAPI call in production.
+    Check if a cover URL points to a valid image.
+    Rejects Open Library's 1x1 placeholder.
 
     Args:
-        books: List of Book objects from the database.
+        url (str): The cover image URL.
 
     Returns:
-        dict: Recommended book details or None if no books available.
+        str | None: The validated URL if valid, otherwise None.
     """
     try:
-        if not books:
-            return None
+        response = requests.get(url, timeout=5, stream=True)
+        if (
+            response.status_code == 200
+            and response.headers.get("Content-Type", "").startswith("image")
+        ):
+            img = Image.open(BytesIO(response.content))
+            width, height = img.size
+            if width > 1 and height > 1:
+                return url
+    except Exception:
+        pass
+    return None
 
-        # Prefer books with high ratings (Bonus #4)
-        rated_books = [book for book in books if book.rating is not None]
-        if rated_books:
-            # Select book with highest rating
-            max_rating = max(book.rating for book in rated_books)
-            top_rated = [book for book in rated_books if book.rating == max_rating]
-            selected_book = random.choice(top_rated)
-        else:
-            # Fallback to random book if no ratings
-            selected_book = random.choice(books)
 
-        # Fetch cover image
-        try:
-            response = requests.get(
-                f"https://covers.openlibrary.org/b/isbn/{selected_book.isbn}-M.jpg",
-                timeout=5,
+def ai_recommendation(books: list[Book]) -> dict | None:
+    """
+    Try to generate a book recommendation using Hugging Face free inference API.
+
+    Args:
+        books (list[Book]): All books in the library.
+
+    Returns:
+        dict | None: Recommendation data or None if failed.
+    """
+    # Build a simple prompt for the model
+    prompt = "Here are the books currently in my library:\n"
+    for b in books:
+        prompt += f"- \"{b.title}\" by {b.author.name}\n"
+    prompt += "\nSuggest one more book I might like (just give title and author)."
+
+    try:
+        resp = requests.post(
+            "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta",
+            headers={"Content-Type": "application/json"},
+            json={"inputs": prompt},
+            timeout=15,
+        )
+        data = resp.json()
+
+        if isinstance(data, list) and "generated_text" in data[0]:
+            text = data[0]["generated_text"].strip()
+            parts = text.split(" by ")
+
+            title = (
+                parts[0]
+                .replace("Suggest one more book I might like:", "")
+                .strip()
+                .strip('"')
             )
-            cover_image = response.url if response.status_code == 200 else None
-        except requests.RequestException:
-            cover_image = None
+            author = parts[1].strip() if len(parts) > 1 else "Unknown"
 
-        return {
-            "title": selected_book.title,
-            "author": selected_book.author.name,
-            "isbn": selected_book.isbn,
-            "cover_image": cover_image,
-            "reason": f"Recommended for its {'high rating' if selected_book.rating else 'popularity'}."
-        }
-
+            return {
+                "title": title,
+                "author": author,
+                "cover_url": url_for("static", filename="default_cover.jpg"),
+                "reason": "AI suggestion from Hugging Face",
+            }
     except Exception as e:
-        print(f"Error generating recommendation: {e}")
+        print("AI recommendation failed:", e)
+
+    return None
+
+
+def openlibrary_recommendation(base_book: Book) -> dict | None:
+    """
+    Fetch a recommendation from Open Library using subjects of a base book.
+
+    Args:
+        base_book (Book): A book to base recommendations on.
+
+    Returns:
+        dict | None: Recommendation data or None if failed.
+    """
+    if not base_book.isbn:
         return None
 
-    """
-    To use a real AI API (e.g., RapidAPI ChatGPT-compatible API):
-    1. Sign up for RapidAPI and get an API key.
-    2. Choose an API like 'chatgpt-best-price' or similar.
-    3. Replace this function with code like:
+    try:
+        # Get metadata from Open Library
+        resp = requests.get(
+            f"https://openlibrary.org/api/books?bibkeys=ISBN:{base_book.isbn}&jscmd=data&format=json",
+            timeout=5,
+        )
+        data = resp.json()
+        key = f"ISBN:{base_book.isbn}"
 
-    import requests
-    def get_book_recommendation(books):
-        try:
-            book_titles = [book.title for book in books]
-            prompt = f"Recommend a book from this list based on ratings: {book_titles}"
-            headers = {
-                'X-RapidAPI-Key': 'YOUR_API_KEY',
-                'X-RapidAPI-Host': 'chatgpt-best-price.p.rapidapi.com'
-            }
-            response = requests.post(
-                'https://chatgpt-best-price.p.rapidapi.com/v1/completions',
-                json={"prompt": prompt, "max_tokens": 100},
-                headers=headers,
-                timeout=10
+        if key in data and "subjects" in data[key]:
+            subject = data[key]["subjects"][0]["name"]
+
+            search_resp = requests.get(
+                f"https://openlibrary.org/subjects/{subject.lower().replace(' ', '_')}.json?limit=5",
+                timeout=5,
             )
-            response.raise_for_status()
-            result = response.json()
-            recommended_title = result['choices'][0]['text'].strip()
-            selected_book = next((book for book in books if book.title == recommended_title), None)
-            if selected_book:
-                response = requests.get(
-                    f"https://covers.openlibrary.org/b/isbn/{selected_book.isbn}-M.jpg",
-                    timeout=5
-                )
-                cover_image = response.url if response.status_code == 200 else None
+            rec_data = search_resp.json()
+
+            if "works" in rec_data and rec_data["works"]:
+                rec = random.choice(rec_data["works"])
                 return {
-                    "title": selected_book.title,
-                    "author": selected_book.author.name,
-                    "isbn": selected_book.isbn,
-                    "cover_image": cover_image,
-                    "reason": "Recommended by AI based on your library."
+                    "title": rec.get("title", "Unknown"),
+                    "author": rec["authors"][0]["name"] if rec.get("authors") else "Unknown",
+                    "cover_url": (
+                        f"https://covers.openlibrary.org/b/id/{rec['cover_id']}-L.jpg"
+                        if rec.get("cover_id")
+                        else url_for("static", filename="default_cover.jpg")
+                    ),
+                    "reason": f"Because you liked '{base_book.title}'",
                 }
-            return None
-        except requests.RequestException as e:
-            print(f"API request failed: {e}")
-            return None
-        except Exception as e:
-            print(f"Error generating recommendation: {e}")
-            return None
-    """
+    except Exception as e:
+        print("Open Library recommendation failed:", e)
+
+    return None
 
 
-@app.route("/")
+# -----------------------------------------------------------------------------
+# Routes
+# -----------------------------------------------------------------------------
+@app.route("/", methods=["GET"])
 def home():
-    """Render the homepage with sorted books and optional search."""
-    sort_by = request.args.get("sort_by", "title")
-    search = request.args.get("search", "").strip()
+    """
+    Home page route.
+    Supports search and sorting of books.
+    """
+    query = request.args.get("q", "")
+    sort_by = request.args.get("sort", "title")
 
-    try:
-        query = Book.query
-        if search:
-            query = query.filter(Book.title.ilike(f"%{search}%"))
+    books = Book.query
 
-        if sort_by == "author":
-            books = query.join(Author).order_by(Author.name, Book.title).all()
-        else:
-            books = query.order_by(Book.title).all()
+    if query:
+        books = books.join(Author).filter(
+            (Book.title.ilike(f"%{query}%")) | (Author.name.ilike(f"%{query}%"))
+        )
 
-        # Fetch cover images
-        for book in books:
-            try:
-                response = requests.get(
-                    f"https://covers.openlibrary.org/b/isbn/{book.isbn}-M.jpg",
-                    timeout=5,
-                )
-                book.cover_image = response.url if response.status_code == 200 else None
-            except requests.RequestException:
-                book.cover_image = None
+    if sort_by == "author":
+        books = books.join(Author).order_by(Author.name)
+    elif sort_by == "year":
+        books = books.order_by(Book.publication_year.desc().nullslast())
+    elif sort_by == "rating":
+        books = books.order_by(Book.rating.desc().nullslast())
+    else:
+        books = books.order_by(Book.title)
 
-        authors = Author.query.all()
-        return render_template("home.html", books=books, authors=authors)
-    except Exception as e:
-        flash(f"Error loading books: {str(e)}", "error")
-        return render_template("home.html", books=[], authors=[])
+    books = books.all()
+    authors = Author.query.order_by(Author.name).all()
 
-
-@app.route("/book/<int:book_id>", methods=["GET", "POST"])
-def book_detail(book_id):
-    """Render and update details for a specific book."""
-    try:
-        book = Book.query.get_or_404(book_id)
-        if request.method == "POST":
-            try:
-                rating = request.form.get("rating")
-                if rating and rating.isdigit() and 1 <= int(rating) <= 10:
-                    book.rating = int(rating)
-                    db.session.commit()
-                    flash(f"Rating updated for '{book.title}'!", "success")
-                else:
-                    flash("Invalid rating. Please enter a number between 1 and 10.", "error")
-                return redirect(url_for("book_detail", book_id=book_id))
-            except Exception as e:
-                db.session.rollback()
-                flash(f"Error updating rating: {str(e)}", "error")
-                return redirect(url_for("book_detail", book_id=book_id))
-
-        try:
-            response = requests.get(
-                f"https://covers.openlibrary.org/b/isbn/{book.isbn}-M.jpg", timeout=5
-            )
-            book.cover_image = response.url if response.status_code == 200 else None
-        except requests.RequestException:
-            book.cover_image = None
-        return render_template("book_detail.html", book=book)
-    except Exception as e:
-        flash(f"Error loading book details: {str(e)}", "error")
-        return redirect(url_for("home"))
+    return render_template(
+        "home.html",
+        books=books,
+        authors=authors,
+        search_query=query,
+        sort_by=sort_by,
+    )
 
 
-@app.route("/author/<int:author_id>")
-def author_detail(author_id):
-    """Render details for a specific author."""
-    try:
-        author = Author.query.get_or_404(author_id)
-        return render_template("author_detail.html", author=author)
-    except Exception as e:
-        flash(f"Error loading author details: {str(e)}", "error")
-        return redirect(url_for("home"))
-
-
-@app.route("/add_author", methods=["GET", "POST"])
+@app.route("/add_author", methods=["POST"])
 def add_author():
-    """Handle adding a new author."""
-    if request.method == "POST":
-        try:
-            name = request.form["name"].strip()
-            birth_date = request.form["birthdate"]
-            date_of_death = request.form.get("date_of_death") or None
+    """
+    Add a new author to the database.
+    """
+    name = request.form.get("name")
+    birth_date = request.form.get("birthdate") or None
+    date_of_death = request.form.get("date_of_death") or None
 
-            if not name:
-                flash("Author name is required.", "error")
-                return redirect(url_for("add_author"))
-
-            new_author = Author(
-                name=name, birth_date=birth_date, date_of_death=date_of_death
+    if name:
+        existing = Author.query.filter_by(name=name).first()
+        if not existing:
+            author = Author(
+                name=name,
+                birth_date=birth_date,
+                date_of_death=date_of_death,
             )
-            db.session.add(new_author)
+            db.session.add(author)
             db.session.commit()
-            flash("Author added successfully!", "success")
-            return redirect(url_for("add_author"))
-        except IntegrityError:
-            db.session.rollback()
-            flash("Error: Author could not be added due to a database issue.", "error")
-            return redirect(url_for("add_author"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"Error adding author: {str(e)}", "error")
-            return redirect(url_for("add_author"))
-
-    return render_template("add_author.html")
+    return redirect(url_for("home"))
 
 
-@app.route("/add_book", methods=["GET", "POST"])
+@app.route("/add_book", methods=["POST"])
 def add_book():
-    """Handle adding a new book."""
-    if request.method == "POST":
-        try:
-            isbn = request.form["isbn"].strip()
-            title = request.form["title"].strip()
-            publication_year = request.form["publication_year"]
-            author_id = request.form["author_id"]
+    """
+    Add a new book to the database.
+    """
+    title = request.form.get("title")
+    publication_year = request.form.get("publication_year")
+    isbn = request.form.get("isbn")
+    rating = request.form.get("rating")
+    cover_url = request.form.get("cover_url")
+    author_id = request.form.get("author_id")
 
-            if not isbn or not title or not publication_year or not author_id:
-                flash("All fields are required.", "error")
-                return redirect(url_for("add_book"))
+    if title and author_id:
+        if cover_url:
+            cover_url = validate_cover(cover_url)
 
-            if not isbn.isdigit() or len(isbn) != 13:
-                flash("ISBN must be a 13-digit number.", "error")
-                return redirect(url_for("add_book"))
-
-            new_book = Book(
-                isbn=isbn,
-                title=title,
-                publication_year=int(publication_year),
-                author_id=int(author_id),
-            )
-            db.session.add(new_book)
-            db.session.commit()
-            flash("Book added successfully!", "success")
-            return redirect(url_for("add_book"))
-        except IntegrityError:
-            db.session.rollback()
-            flash("Error: ISBN already exists.", "error")
-            return redirect(url_for("add_book"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"Error adding book: {str(e)}", "error")
-            return redirect(url_for("add_book"))
-
-    try:
-        authors = Author.query.all()
-        return render_template("add_book.html", authors=authors)
-    except Exception as e:
-        flash(f"Error loading authors: {str(e)}", "error")
-        return render_template("add_book.html", authors=[])
-
-
-@app.route("/book/<int:book_id>/delete", methods=["POST"])
-def delete_book(book_id):
-    """Delete a book and its author if no other books remain."""
-    try:
-        book = Book.query.get_or_404(book_id)
-        author_id = book.author_id
-        book_title = book.title
-        db.session.delete(book)
+        book = Book(
+            title=title,
+            publication_year=int(publication_year) if publication_year else None,
+            isbn=isbn or None,
+            rating=float(rating) if rating else None,
+            cover_url=cover_url,
+            author_id=int(author_id),
+        )
+        db.session.add(book)
         db.session.commit()
 
-        # Check if author has other books
-        if not Book.query.filter_by(author_id=author_id).count():
-            author = Author.query.get(author_id)
-            if author:
-                author_name = author.name
-                db.session.delete(author)
-                db.session.commit()
-                flash(
-                    f'Book "{book_title}" and author "{author_name}" deleted successfully!',
-                    "success",
-                )
-            else:
-                flash(f'Book "{book_title}" deleted successfully!', "success")
-        else:
-            flash(f'Book "{book_title}" deleted successfully!', "success")
-
-        return redirect(url_for("home"))
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Error deleting book: {str(e)}", "error")
-        return redirect(url_for("home"))
+    return redirect(url_for("home"))
 
 
-@app.route("/author/<int:author_id>/delete", methods=["POST"])
-def delete_author(author_id):
-    """Delete an author and their books."""
-    try:
-        author = Author.query.get_or_404(author_id)
-        author_name = author.name
+@app.route("/delete_book/<int:book_id>", methods=["POST"])
+def delete_book(book_id):
+    """
+    Delete a book from the database.
+    If its author has no remaining books, delete the author as well.
+    """
+    book = Book.query.get_or_404(book_id)
+    author = book.author
+
+    db.session.delete(book)
+    db.session.commit()
+
+    if not author.books:  # auto-delete orphaned author
         db.session.delete(author)
         db.session.commit()
-        flash(f'Author "{author_name}" and their books deleted successfully!', "success")
-        return redirect(url_for("home"))
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Error deleting author: {str(e)}", "error")
-        return redirect(url_for("home"))
+
+    return redirect(url_for("home"))
 
 
-@app.route("/recommend")
+@app.route("/delete_author/<int:author_id>", methods=["POST"])
+def delete_author(author_id):
+    """
+    Delete an author and all their books from the database.
+    """
+    author = Author.query.get_or_404(author_id)
+    db.session.delete(author)
+    db.session.commit()
+    return redirect(url_for("home"))
+
+
+@app.route("/recommend", methods=["GET"])
 def recommend():
-    """Render a book recommendation based on library contents."""
-    try:
-        books = Book.query.all()
-        recommendation = get_book_recommendation(books)
-        if recommendation:
-            return render_template("recommend.html", recommendation=recommendation)
-        else:
-            flash("No books available for recommendation.", "error")
-            return render_template("recommend.html", recommendation=None)
-    except Exception as e:
-        flash(f"Error generating recommendation: {str(e)}", "error")
-        return render_template("recommend.html", recommendation=None)
+    """
+    Get a book recommendation.
+    Priority:
+    1. Hugging Face AI
+    2. Open Library subjects
+    3. Random fallback from local library
+    """
+    books = Book.query.all()
+    if not books:
+        return jsonify({
+            "title": "No books available",
+            "author": "",
+            "cover_url": url_for("static", filename="default_cover.jpg"),
+        })
+
+    # --- 1. Try AI recommendation ---
+    suggestion = ai_recommendation(books)
+
+    # --- 2. Try Open Library recommendation ---
+    if not suggestion:
+        base_book = random.choice(books)
+        suggestion = openlibrary_recommendation(base_book)
+
+    # --- 3. Fallback: local random ---
+    if not suggestion:
+        base_book = random.choice(books)
+        cover = validate_cover(base_book.cover_url) if base_book.cover_url else None
+        if not cover:
+            cover = url_for("static", filename="default_cover.jpg")
+        suggestion = {
+            "title": base_book.title,
+            "author": base_book.author.name,
+            "cover_url": cover,
+            "reason": "Random suggestion from your library",
+        }
+
+    return jsonify(suggestion)
 
 
-def seed_data():
-    """Seed the database with initial authors and books."""
-    with app.app_context():
-        try:
-            if Author.query.count() == 0:
-                authors = [
-                    Author(name="Jane Austen", birth_date="1775-12-16"),
-                    Author(
-                        name="George Orwell",
-                        birth_date="1903-06-25",
-                        date_of_death="1950-01-21",
-                    ),
-                    Author(name="J.K. Rowling", birth_date="1965-07-31"),
-                    Author(
-                        name="Mark Twain",
-                        birth_date="1835-11-30",
-                        date_of_death="1910-04-21",
-                    ),
-                    Author(
-                        name="Virginia Woolf",
-                        birth_date="1882-01-25",
-                        date_of_death="1941-03-28",
-                    ),
-                ]
-                db.session.bulk_save_objects(authors)
-                db.session.commit()
-
-            if Book.query.count() == 0:
-                books = [
-                    Book(
-                        isbn="9780141439518",
-                        title="Pride and Prejudice",
-                        publication_year=1813,
-                        author_id=1,
-                    ),
-                    Book(
-                        isbn="9780451524935",
-                        title="1984",
-                        publication_year=1949,
-                        author_id=2,
-                    ),
-                    Book(
-                        isbn="9780747532743",
-                        title="Harry Potter and the Philosopher's Stone",
-                        publication_year=1997,
-                        author_id=3,
-                    ),
-                    Book(
-                        isbn="9780486284736",
-                        title="Adventures of Huckleberry Finn",
-                        publication_year=1884,
-                        author_id=4,
-                    ),
-                    Book(
-                        isbn="9780141182636",
-                        title="Mrs Dalloway",
-                        publication_year=1925,
-                        author_id=5,
-                    ),
-                ]
-                db.session.bulk_save_objects(books)
-                db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            print(f"Error seeding data: {e}")
-
-
+# -----------------------------------------------------------------------------
+# Entry point
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    seed_data()
-    app.run(port=5002)
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True, port=5002)

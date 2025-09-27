@@ -1,0 +1,25 @@
+<!-- Modal: List of all authors -->
+<div id="authorListModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal('authorListModal')">&times;</span>
+    <h2>Authors</h2>
+
+    <div class="author-list">
+      {% for author in authors %}
+        <div class="author-row">
+          <!-- Open author detail modal -->
+          <span class="link" onclick="openModal('authorModal{{ author.id }}')">{{ author.name }}</span>
+
+          <!-- Delete author form -->
+          <form method="post" action="{{ url_for('delete_author', author_id=author.id) }}"
+                onsubmit="return confirm('Delete this author and all their books?');">
+            <button class="btn danger" type="submit">Delete</button>
+          </form>
+        </div>
+
+        <!-- Include author detail modal -->
+        {% include 'author_detail.html' %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
