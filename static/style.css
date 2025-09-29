@@ -21,7 +21,6 @@ body.dark-mode { background: #121212; color: #eee; }
   box-sizing: border-box;
   border-right: 1px solid #e0e0e0;
 
-  /* Sticky Sidebar */
   position: sticky;
   top: 0;
   height: 100vh;
@@ -39,7 +38,6 @@ body.dark-mode .sidebar {
   gap: 8px;
   margin-bottom: 12px;
 }
-/* Sidebar buttons */
 .sidebar .btn {
   background: #fff;
   color: #1d1d1f;
@@ -146,8 +144,6 @@ body.dark-mode .search-bar select { background: #2a2a2a; color: #eee; border: 1p
 }
 .book-card h3 { font-size: 1rem; margin: 6px 0 2px; font-weight: 800; }
 .book-card p { margin: 0; color: #61656d; }
-
-/* Dark mode for book cards */
 body.dark-mode .book-card {
   background: #1f1f1f !important;
   color: #eee !important;
@@ -170,8 +166,6 @@ body.dark-mode .book-card p { color: #ccc !important; }
 body.dark-mode .modal-content { background: #1f1f1f; color: #eee; }
 .close { position: absolute; right: 14px; top: 10px; font-size: 1.6rem; cursor: pointer; }
 .modal-content img { max-width: 100%; display: block; margin: 0 auto 12px; }
-
-/* 🔒 Fixed-size cover inside book detail modal */
 .modal-cover {
   width: 300px;
   height: 500px;
@@ -181,8 +175,6 @@ body.dark-mode .modal-content { background: #1f1f1f; color: #eee; }
   margin: 0 auto 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
-
-/* Delete button centered inside modals */
 .modal-content form .btn.danger { display: block; margin: 14px auto 0; }
 
 /* ===== Forms ===== */
@@ -214,7 +206,6 @@ body.dark-mode form textarea {
   border: 1px solid #555;
   color: #eee;
 }
-/* Cover preview */
 .cover-preview { text-align: center; margin-top: 6px; }
 .cover-preview img {
   width: 120px; height: auto;
@@ -259,8 +250,6 @@ body.dark-mode .author-row .link { color: #4f8dff; }
 .author-book-info strong { display: block; font-size: 0.92rem; margin-bottom: 2px; }
 .author-book-info span { font-size: 0.82rem; color: #61656d; }
 .author-book-info .rating { color: #ff9800; font-weight: 700; }
-
-/* Dark mode for Author Detail Grid */
 body.dark-mode .author-book-card {
   background: #1f1f1f;
   color: #eee;
@@ -318,3 +307,23 @@ body.dark-mode .loading-text { color: #aaa; }
 #toast.show { visibility: visible; animation: fadein 0.4s, fadeout 0.4s 2.6s; }
 @keyframes fadein { from { bottom: 0; opacity: 0; } to { bottom: 28px; opacity: 1; } }
 @keyframes fadeout { from { bottom: 28px; opacity: 1; } to { bottom: 0; opacity: 0; } }
+
+/* ===== Flash Messages ===== */
+.flash-messages {
+  margin: 10px auto;
+  max-width: 600px;
+}
+.flash {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.flash.success {
+  background: #d4edda;
+  color: #155724;
+}
+.flash.error {
+  background: #f8d7da;
+  color: #721c24;
+}

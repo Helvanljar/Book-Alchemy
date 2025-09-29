@@ -4,6 +4,17 @@
     <span class="close" onclick="closeModal('addAuthorModal')">&times;</span>
     <h2>Add Author</h2>
 
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
     <form method="post" action="{{ url_for('add_author') }}">
       <label for="name">Name</label>
       <input type="text" id="name" name="name" required>

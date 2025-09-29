@@ -14,7 +14,6 @@
   <aside class="sidebar">
     <h2>Menu</h2>
 
-    <!-- Dark mode toggle -->
     <div class="toggle-wrapper">
       <label class="switch">
         <input type="checkbox" id="themeToggle">
@@ -23,16 +22,25 @@
       <span>Dark Mode</span>
     </div>
 
-    <!-- Navigation buttons (modals) -->
     <button class="btn" onclick="openModal('authorListModal')">📚 Authors</button>
     <button class="btn" onclick="openModal('addBookModal')">➕ Add Book</button>
     <button class="btn" onclick="openModal('addAuthorModal')">👤 Add Author</button>
     <button class="btn" id="recommendOpen">✨ Recommend</button>
   </aside>
 
-  <!-- Main content -->
   <main class="main">
     <h1>The Digital Library</h1>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
 
     <!-- Search + Sort form -->
     <form class="search-bar" method="get" action="{{ url_for('home') }}">
@@ -42,7 +50,6 @@
         <button type="submit" class="btn primary">Search</button>
       </div>
 
-      <!-- Sort dropdown -->
       <select name="sort" onchange="this.form.submit()">
         <option value="title" {% if sort_by=='title' %}selected{% endif %}>Sort by Title</option>
         <option value="author" {% if sort_by=='author' %}selected{% endif %}>Sort by Author</option>
@@ -51,11 +58,9 @@
       </select>
     </form>
 
-    <!-- Book Grid -->
     <section class="book-grid">
       {% if books %}
         {% for book in books %}
-          <!-- Individual book card -->
           <article class="book-card" onclick="openModal('bookModal{{ book.id }}')">
             <img src="{{ book.cover_url if book.cover_url and book.cover_url.strip() else url_for('static', filename='default_cover.jpg') }}"
                  onerror="this.onerror=null;this.src='{{ url_for('static', filename='default_cover.jpg') }}'"
@@ -63,24 +68,19 @@
             <h3>{{ book.title }}</h3>
             <p>{{ book.author.name }}</p>
           </article>
-
-          <!-- Include book modal for details -->
           {% include 'book_detail.html' %}
         {% endfor %}
       {% else %}
-        <!-- No results message -->
-        <p class="loading-text">No books match your search.</p>
+        <p class="loading-text">No books found.</p>
       {% endif %}
     </section>
   </main>
 
-  <!-- Global modals -->
   {% include 'author_list.html' %}
   {% include 'add_book.html' %}
   {% include 'add_author.html' %}
   {% include 'recommend.html' %}
 
-  <!-- Toast notifications -->
   <div id="toast"></div>
 </body>
 </html>

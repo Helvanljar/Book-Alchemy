@@ -19,8 +19,10 @@ from flask import (
     request,
     redirect,
     url_for,
-    jsonify
+    jsonify,
+    flash
 )
+from sqlalchemy.exc import SQLAlchemyError
 
 from data_models import db, Author, Book
 
@@ -29,6 +31,7 @@ from data_models import db, Author, Book
 # Flask setup
 # -----------------------------------------------------------------------------
 app = Flask(__name__, template_folder="templates", static_folder="static")
+app.secret_key = "replace-with-a-secure-random-key"  # Required for flash messages
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "data", "library.db")
@@ -47,12 +50,6 @@ def validate_cover(url: str) -> str | None:
     """
     Check if a cover URL points to a valid image.
     Rejects Open Library's 1x1 placeholder.
-
-    Args:
-        url (str): The cover image URL.
-
-    Returns:
-        str | None: The validated URL if valid, otherwise None.
     """
     try:
         response = requests.get(url, timeout=5, stream=True)
@@ -72,14 +69,7 @@ def validate_cover(url: str) -> str | None:
 def ai_recommendation(books: list[Book]) -> dict | None:
     """
     Try to generate a book recommendation using Hugging Face free inference API.
-
-    Args:
-        books (list[Book]): All books in the library.
-
-    Returns:
-        dict | None: Recommendation data or None if failed.
     """
-    # Build a simple prompt for the model
     prompt = "Here are the books currently in my library:\n"
     for b in books:
         prompt += f"- \"{b.title}\" by {b.author.name}\n"
@@ -121,18 +111,11 @@ def ai_recommendation(books: list[Book]) -> dict | None:
 def openlibrary_recommendation(base_book: Book) -> dict | None:
     """
     Fetch a recommendation from Open Library using subjects of a base book.
-
-    Args:
-        base_book (Book): A book to base recommendations on.
-
-    Returns:
-        dict | None: Recommendation data or None if failed.
     """
     if not base_book.isbn:
         return None
 
     try:
-        # Get metadata from Open Library
         resp = requests.get(
             f"https://openlibrary.org/api/books?bibkeys=ISBN:{base_book.isbn}&jscmd=data&format=json",
             timeout=5,
@@ -207,18 +190,26 @@ def home():
     )
 
 
-@app.route("/add_author", methods=["POST"])
+@app.route("/add_author", methods=["GET", "POST"])
 def add_author():
     """
-    Add a new author to the database.
+    Add a new author (GET = form, POST = save).
     """
-    name = request.form.get("name")
-    birth_date = request.form.get("birthdate") or None
-    date_of_death = request.form.get("date_of_death") or None
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        birth_date = request.form.get("birthdate") or None
+        date_of_death = request.form.get("date_of_death") or None
 
-    if name:
+        if not name:
+            flash("Author name cannot be empty.", "error")
+            return redirect(url_for("add_author"))
+
         existing = Author.query.filter_by(name=name).first()
-        if not existing:
+        if existing:
+            flash("Author already exists.", "error")
+            return redirect(url_for("add_author"))
+
+        try:
             author = Author(
                 name=name,
                 birth_date=birth_date,
@@ -226,37 +217,70 @@ def add_author():
             )
             db.session.add(author)
             db.session.commit()
-    return redirect(url_for("home"))
+            flash("Author added successfully!", "success")
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash("Failed to add author.", "error")
+            print("DB error:", e)
+
+        return redirect(url_for("home"))
+
+    return render_template("add_author.html")
 
 
-@app.route("/add_book", methods=["POST"])
+@app.route("/add_book", methods=["GET", "POST"])
 def add_book():
     """
-    Add a new book to the database.
+    Add a new book (GET = form, POST = save).
     """
-    title = request.form.get("title")
-    publication_year = request.form.get("publication_year")
-    isbn = request.form.get("isbn")
-    rating = request.form.get("rating")
-    cover_url = request.form.get("cover_url")
-    author_id = request.form.get("author_id")
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        publication_year = request.form.get("publication_year")
+        isbn = (request.form.get("isbn") or "").strip()
+        rating = request.form.get("rating")
+        cover_url = request.form.get("cover_url")
+        author_id = request.form.get("author_id")
 
-    if title and author_id:
+        if not title or not author_id:
+            flash("Title and author are required.", "error")
+            return redirect(url_for("add_book"))
+
+        if rating:
+            try:
+                rating = float(rating)
+                if not (0 <= rating <= 10):
+                    raise ValueError
+            except ValueError:
+                flash("Rating must be a number between 0 and 10.", "error")
+                return redirect(url_for("add_book"))
+        else:
+            rating = None
+
         if cover_url:
             cover_url = validate_cover(cover_url)
 
-        book = Book(
-            title=title,
-            publication_year=int(publication_year) if publication_year else None,
-            isbn=isbn or None,
-            rating=float(rating) if rating else None,
-            cover_url=cover_url,
-            author_id=int(author_id),
-        )
-        db.session.add(book)
-        db.session.commit()
+        try:
+            book = Book(
+                title=title,
+                publication_year=int(publication_year)
+                if publication_year else None,
+                isbn=isbn or None,
+                rating=rating,
+                cover_url=cover_url,
+                author_id=int(author_id),
+            )
+            db.session.add(book)
+            db.session.commit()
+            flash("Book added successfully!", "success")
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash("Failed to add book.", "error")
+            print("DB error:", e)
 
-    return redirect(url_for("home"))
+        return redirect(url_for("home"))
+
+    authors = Author.query.order_by(Author.name).all()
+    return render_template("add_book.html", authors=authors)
 
 
 @app.route("/delete_book/<int:book_id>", methods=["POST"])
@@ -271,10 +295,11 @@ def delete_book(book_id):
     db.session.delete(book)
     db.session.commit()
 
-    if not author.books:  # auto-delete orphaned author
+    if not author.books:
         db.session.delete(author)
         db.session.commit()
 
+    flash("Book deleted successfully.", "success")
     return redirect(url_for("home"))
 
 
@@ -286,6 +311,7 @@ def delete_author(author_id):
     author = Author.query.get_or_404(author_id)
     db.session.delete(author)
     db.session.commit()
+    flash("Author deleted successfully.", "success")
     return redirect(url_for("home"))
 
 
@@ -293,10 +319,6 @@ def delete_author(author_id):
 def recommend():
     """
     Get a book recommendation.
-    Priority:
-    1. Hugging Face AI
-    2. Open Library subjects
-    3. Random fallback from local library
     """
     books = Book.query.all()
     if not books:
@@ -306,15 +328,12 @@ def recommend():
             "cover_url": url_for("static", filename="default_cover.jpg"),
         })
 
-    # --- 1. Try AI recommendation ---
     suggestion = ai_recommendation(books)
 
-    # --- 2. Try Open Library recommendation ---
     if not suggestion:
         base_book = random.choice(books)
         suggestion = openlibrary_recommendation(base_book)
 
-    # --- 3. Fallback: local random ---
     if not suggestion:
         base_book = random.choice(books)
         cover = validate_cover(base_book.cover_url) if base_book.cover_url else None
